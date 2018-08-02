@@ -1,0 +1,157 @@
+TYPE-POOLS: SLIS.
+
+DATA: GT_DATA TYPE TABLE OF ZPERS_BILG WITH HEADER LINE,
+      GS_DATA LIKE LINE OF GT_DATA.
+
+DATA: G_CONT        TYPE SCRFNAME VALUE 'CONT_ALV',
+      G_GRID        TYPE REF TO CL_GUI_ALV_GRID,
+      G_CUSTOM_CONT TYPE REF TO CL_GUI_CUSTOM_CONTAINER,
+      GS_LAYOUT     TYPE LVC_S_LAYO,
+      GT_FCAT       TYPE LVC_T_FCAT,
+      GS_FCAT       LIKE LINE OF GT_FCAT.
+
+      GS_LAYOUT-ZEBRA = 'X'.
+
+CALL SCREEN 0100.
+
+
+CLASS LCL_EVENT_HANDLER DEFINITION.
+  PUBLIC SECTION.
+    METHODS:
+      HANDLE_BUTTON_CLICK
+                    FOR EVENT BUTTON_CLICK OF CL_GUI_ALV_GRID
+        IMPORTING ES_COL_ID ES_ROW_NO.
+
+  PRIVATE SECTION.
+ENDCLASS.
+
+CLASS LCL_EVENT_HANDLER IMPLEMENTATION.
+  METHOD HANDLE_BUTTON_CLICK.
+    PERFORM HANDLE_BUTTON_CLICK USING ES_COL_ID ES_ROW_NO.
+  ENDMETHOD.
+
+ENDCLASS.
+
+DATA GR_EVENT_HANDLER TYPE REF TO LCL_EVENT_HANDLER .
+
+*&---------------------------------------------------------------------*
+*&      Module  STATUS_0100  OUTPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE STATUS_0100 OUTPUT.
+  SET PF-STATUS '0100'.
+  SET TITLEBAR '0100' WITH SY-DATUM SY-UZEIT.
+  PERFORM GET_DATA.
+  PERFORM CREATE_CONT.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Module  USER_COMMAND_0100  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+
+FORM HANDLE_BUTTON_CLICK  USING    P_ES_COL_ID TYPE LVC_S_COL
+                                   P_ES_ROW_NO TYPE LVC_S_ROID.
+
+  READ TABLE GT_DATA INTO GS_DATA INDEX P_ES_ROW_NO-ROW_ID.
+  PERFORM POPUP.
+
+ENDFORM.
+
+MODULE USER_COMMAND_0100 INPUT.
+  CASE SY-UCOMM.
+    WHEN 'BACK' OR 'EXIT' OR 'CANCEL'.
+      LEAVE TO SCREEN 0.
+  ENDCASE.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*&      Form  GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM GET_DATA .
+
+  SELECT * INTO CORRESPONDING FIELDS OF TABLE GT_DATA
+  FROM ZPERS_BILG.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  CREATE_CONT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM CREATE_CONT .
+
+  IF G_CUSTOM_CONT IS INITIAL.
+    CREATE OBJECT G_CUSTOM_CONT
+      EXPORTING
+        CONTAINER_NAME = G_CONT.
+    CREATE OBJECT G_GRID
+      EXPORTING
+        I_PARENT = G_CUSTOM_CONT.
+
+    CALL FUNCTION 'LVC_FIELDCATALOG_MERGE'
+      EXPORTING
+        I_BUFFER_ACTIVE    = 'X'
+        I_STRUCTURE_NAME   = 'ZPERS_BILG'
+        I_BYPASSING_BUFFER = 'X'
+      CHANGING
+        CT_FIELDCAT        = GT_FCAT.
+
+*pushbutton.
+    LOOP AT GT_FCAT INTO GS_FCAT.
+      CASE GS_FCAT-FIELDNAME.
+        WHEN 'TCKNO'.
+          GS_FCAT-STYLE = CL_GUI_ALV_GRID=>MC_STYLE_BUTTON.
+          MODIFY GT_FCAT FROM GS_FCAT.
+      ENDCASE.
+    ENDLOOP.
+
+    CREATE OBJECT GR_EVENT_HANDLER.
+
+    SET HANDLER GR_EVENT_HANDLER->HANDLE_BUTTON_CLICK FOR G_GRID.
+
+    CALL METHOD G_GRID->SET_TABLE_FOR_FIRST_DISPLAY
+      EXPORTING
+        IS_LAYOUT       = GS_LAYOUT
+      CHANGING
+        IT_FIELDCATALOG = GT_FCAT
+        IT_OUTTAB       = GT_DATA[].
+
+  ELSE.
+    G_GRID->CHECK_CHANGED_DATA( ).
+    G_GRID->REFRESH_TABLE_DISPLAY( ).
+  ENDIF.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  POPUP
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM POPUP .
+
+    DATA: lt_data LIKE GT_DATA OCCURS 0.
+    APPEND GS_DATA TO lt_data.
+
+  CALL FUNCTION 'REUSE_ALV_POPUP_TO_SELECT'
+    EXPORTING
+      I_TITLE          = ' DETAY '
+      I_SELECTION      = 'X'
+      I_ZEBRA          = 'X'
+      I_TABNAME        = 'gt_data'
+      I_STRUCTURE_NAME = 'ZPERS_BILG'
+    TABLES
+      T_OUTTAB         = lt_DATA.
+
+ENDFORM.
